@@ -1,0 +1,15 @@
+# Signing private keys (NEVER commit!)
+cosign.key
+*.key
+
+# Local VM / ISO build artifacts
+output/
+*.qcow2
+*.iso
+*.raw
+*.img
+
+# Editor & OS clutter
+.DS_Store
+*.swp
+*~

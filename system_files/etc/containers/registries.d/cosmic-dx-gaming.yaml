@@ -1,0 +1,3 @@
+docker:
+  ghcr.io/foxmccloud9999/cosmic-dx-gaming:
+    use-sigstore-attachments: true

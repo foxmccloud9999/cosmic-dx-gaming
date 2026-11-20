@@ -1,0 +1,124 @@
+name: Build and Publish Custom COSMIC Atomic Image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Nightly rebuild at 08:00 UTC to pick up Fedora COSMIC, DX, and NVIDIA akmods updates
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  IMAGE_NAME: cosmic-dx-gaming
+  FEDORA_VERSION: '45'
+
+jobs:
+  build:
+    name: Build & Verify ${{ env.IMAGE_NAME }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/local/share/chromium \
+            /usr/local/lib/node_modules \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/.ghcup
+          sudo docker image prune -af || true
+          sudo docker builder prune -af || true
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute normalized metadata
+        id: meta
+        run: |
+          echo "date=$(date -u +'%Y%m%d')" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build OCI bootc image
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          containerfiles: |
+            ./Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: |
+            latest
+            ${{ env.FEDORA_VERSION }}
+            ${{ env.FEDORA_VERSION }}-${{ steps.meta.outputs.date }}
+          oci: true
+          layers: true
+          build-args: |
+            FEDORA_VERSION=${{ env.FEDORA_VERSION }}
+            IMAGE_NAME=${{ env.IMAGE_NAME }}
+            IMAGE_OWNER=${{ steps.meta.outputs.owner }}
+
+      - name: Smoke-test image contents and bootc lint
+        run: |
+          podman run --rm "${{ steps.build.outputs.image }}:latest" bash -euo pipefail -c '
+            command -v ujust just docker podman distrobox gamescope mangohud gamemoderun steam
+            test -f /usr/share/homebrew.tar.zst || test -d /usr/share/homebrew
+            systemctl is-enabled brew-setup.service brew-update.timer brew-upgrade.timer
+            systemctl is-enabled docker.socket podman.socket libvirtd.service incus.socket
+            systemctl is-enabled nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service nvidia-persistenced.service
+            KVER="$(rpm -q --qf "%{VERSION}-%{RELEASE}.%{ARCH}" kernel-core | head -n1)"
+            modinfo -k "$KVER" nvidia >/dev/null
+            just --justfile /usr/share/ublue-os/just/60-custom.just --list >/dev/null
+            bootc container lint
+          '
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: |
+            latest
+            ${{ env.FEDORA_VERSION }}
+            ${{ env.FEDORA_VERSION }}-${{ steps.meta.outputs.date }}
+          registry: ghcr.io/${{ steps.meta.outputs.owner }}
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Sign pushed image digest with Cosign
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ''
+        run: |
+          if [[ -z "${COSIGN_PRIVATE_KEY:-}" ]]; then
+            echo "::warning::COSIGN_PRIVATE_KEY secret is not set; skipping image signature."
+            exit 0
+          fi
+          IMAGE_URI="ghcr.io/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$IMAGE_URI"
