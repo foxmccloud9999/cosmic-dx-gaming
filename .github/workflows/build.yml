@@ -78,7 +78,9 @@ jobs:
             test -f /usr/share/homebrew.tar.zst || test -d /usr/share/homebrew
             systemctl is-enabled brew-setup.service brew-update.timer brew-upgrade.timer
             systemctl is-enabled docker.socket podman.socket libvirtd.service incus.socket
-            systemctl is-enabled nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service nvidia-persistenced.service
+            systemctl is-enabled nvidia-persistenced.service nvidia-cdi-refresh.service nvidia-cdi-refresh.path
+            test -f "/etc/pki/containers/${{ env.IMAGE_NAME }}.pub"
+            grep -q "ghcr.io/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}" /etc/containers/policy.json
             KVER="$(rpm -q --qf "%{VERSION}-%{RELEASE}.%{ARCH}" kernel-core | head -n1)"
             modinfo -k "$KVER" nvidia >/dev/null
             just --justfile /usr/share/ublue-os/just/60-custom.just --list >/dev/null

@@ -76,7 +76,7 @@ fi
 dnf5 install -y "${NVIDIA_ADDONS[@]}"
 
 # Temporarily disable RPM Fusion repos so RPM Fusion NVIDIA packages never conflict with Negativo17
-if dnf5 repolist --all | grep -q rpmfusion; then
+if compgen -G "/etc/yum.repos.d/rpmfusion*.repo" >/dev/null; then
     dnf5 config-manager setopt "rpmfusion*".enabled=0
 fi
 
@@ -145,14 +145,17 @@ if [[ -f /usr/lib/dracut/dracut.conf.d/99-nvidia.conf ]]; then
     sed -i 's@ nvidia @ i915 amdgpu nvidia @g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
 fi
 
-# 7. Enable NVIDIA power management, persistence, and container CDI systemd units
-systemctl enable \
+# 7. Enable NVIDIA persistence, container CDI, and optional power-management systemd units
+systemctl enable nvidia-persistenced.service
+
+for unit in \
+    nvidia-cdi-refresh.service \
+    nvidia-cdi-refresh.path \
+    nvidia-powerd.service \
     nvidia-suspend.service \
     nvidia-hibernate.service \
     nvidia-resume.service \
-    nvidia-persistenced.service
-
-for unit in nvidia-cdi-refresh.service nvidia-cdi-refresh.path ublue-nvctk-cdi.service; do
+    ublue-nvctk-cdi.service; do
     if systemctl list-unit-files "$unit" &>/dev/null; then
         systemctl enable "$unit"
     fi

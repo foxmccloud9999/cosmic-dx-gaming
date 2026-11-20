@@ -64,19 +64,31 @@ IMAGE_OWNER="${IMAGE_OWNER:-YOUR_GITHUB_USERNAME}"
 REGISTRIES_D_FILE="/etc/containers/registries.d/${IMAGE_NAME}.yaml"
 
 if [[ -f /ctx/repo/cosign.pub && "${IMAGE_OWNER}" != "YOUR_GITHUB_USERNAME" ]]; then
-    mkdir -p /etc/pki/containers
+    mkdir -p /etc/pki/containers /etc/containers
     cp /ctx/repo/cosign.pub "/etc/pki/containers/${IMAGE_NAME}.pub"
 
     OWNER_LOWER="${IMAGE_OWNER,,}"
     NAME_LOWER="${IMAGE_NAME,,}"
     IMAGE_REF="ghcr.io/${OWNER_LOWER}/${NAME_LOWER}"
 
-    if [[ -f /etc/containers/policy.json ]]; then
+    POLICY_SRC=""
+    for candidate in /etc/containers/policy.json /usr/etc/containers/policy.json /usr/share/containers/policy.json; do
+        if [[ -f "$candidate" ]]; then
+            POLICY_SRC="$candidate"
+            break
+        fi
+    done
+
+    if [[ -n "$POLICY_SRC" ]]; then
         jq --arg ref "$IMAGE_REF" --arg key "/etc/pki/containers/${IMAGE_NAME}.pub" \
             '.transports.docker[$ref] = [{"type": "sigstoreSigned", "keyPath": $key, "signedIdentity": {"type": "matchRepository"}}]' \
-            /etc/containers/policy.json > /tmp/build-work/policy.json
-        mv /tmp/build-work/policy.json /etc/containers/policy.json
+            "$POLICY_SRC" > /tmp/build-work/policy.json
+    else
+        jq -n --arg ref "$IMAGE_REF" --arg key "/etc/pki/containers/${IMAGE_NAME}.pub" \
+            '{"default": [{"type": "insecureAcceptAnything"}], "transports": {"docker": {($ref): [{"type": "sigstoreSigned", "keyPath": $key, "signedIdentity": {"type": "matchRepository"}}]}}}' \
+            > /tmp/build-work/policy.json
     fi
+    mv /tmp/build-work/policy.json /etc/containers/policy.json
 
     if [[ -f "$REGISTRIES_D_FILE" ]]; then
         sed -i "s|ghcr.io/YOUR_GITHUB_USERNAME/cosmic-dx-gaming|${IMAGE_REF}|g" "$REGISTRIES_D_FILE"
