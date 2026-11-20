@@ -23,7 +23,7 @@ env:
 
 jobs:
   build:
-    name: Build & Verify ${{ env.IMAGE_NAME }}
+    name: Build & Verify cosmic-dx-gaming
     runs-on: ubuntu-latest
 
     steps:
@@ -72,7 +72,7 @@ jobs:
 
       - name: Smoke-test image contents and bootc lint
         run: |
-          podman run --rm "${{ steps.build.outputs.image }}:latest" bash -euo pipefail -c '
+          podman run --rm "localhost/${{ steps.build.outputs.image }}:latest" bash -euo pipefail -c '
             command -v ujust just docker podman distrobox gamescope mangohud gamemoderun steam
             test -f /usr/share/homebrew.tar.zst || test -d /usr/share/homebrew
             systemctl is-enabled brew-setup.service brew-update.timer brew-upgrade.timer
@@ -115,10 +115,12 @@ jobs:
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ''
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ -z "${COSIGN_PRIVATE_KEY:-}" ]]; then
             echo "::warning::COSIGN_PRIVATE_KEY secret is not set; skipping image signature."
             exit 0
           fi
+          printf '%s' "$GITHUB_TOKEN" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
           IMAGE_URI="ghcr.io/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
           cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$IMAGE_URI"
