@@ -44,7 +44,7 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Compute normalized metadata
         id: meta
@@ -54,7 +54,7 @@ jobs:
 
       - name: Build OCI bootc image
         id: build
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@v3
         with:
           containerfiles: |
             ./Containerfile
@@ -65,6 +65,7 @@ jobs:
             ${{ env.FEDORA_VERSION }}-${{ steps.meta.outputs.date }}
           oci: true
           layers: true
+          squash: false
           build-args: |
             FEDORA_VERSION=${{ env.FEDORA_VERSION }}
             IMAGE_NAME=${{ env.IMAGE_NAME }}

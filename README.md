@@ -4,7 +4,7 @@ A custom **Fedora COSMIC Atomic** (`bootc`) desktop image combining **Universal 
 
 ## What Is Included
 
-- **Base OS**: Official Fedora COSMIC Atomic (`quay.io/fedora-ostree-desktops/cosmic-atomic:45`) with RPM Fusion Free & Nonfree hardware-accelerated codecs (`ffmpeg`, `libavcodec-freeworld`, `mesa-*-freeworld`).
+- **Base OS**: Official Fedora COSMIC Atomic (`quay.io/fedora-ostree-desktops/cosmic-atomic:45`) with RPM Fusion Free & Nonfree hardware-accelerated codecs (`ffmpeg`, `mesa-va-drivers-freeworld`, GStreamer Freeworld/Ugly plugins).
 - **Universal Blue Core**:
   - Built-in **Homebrew** (`ghcr.io/ublue-os/brew`) with first-boot user setup and background update/upgrade timers.
   - **`ujust`** (`ublue-os-just`) with curated, **COSMIC-safe** recipes (no GNOME/KDE-only commands).

@@ -22,14 +22,18 @@ INSTALLED_KERNEL="$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' kernel-core | 
 
 # 2. Align Fedora COSMIC Atomic kernel to the exact kernel built against akmods-nvidia-open
 if [[ -n "$TARGET_KERNEL" && "$INSTALLED_KERNEL" != "$TARGET_KERNEL" ]]; then
-    echo "Kernel mismatch detected (installed=${INSTALLED_KERNEL}, akmods=${TARGET_KERNEL}); aligning kernel from /tmp/akmods/kernel-rpms"
+    KERNEL_RPMS_DIR="/tmp/akmods-nvidia/kernel-rpms"
+    if [[ ! -d "$KERNEL_RPMS_DIR" ]]; then
+        KERNEL_RPMS_DIR="/tmp/akmods/kernel-rpms"
+    fi
+    echo "Kernel mismatch detected (installed=${INSTALLED_KERNEL}, akmods=${TARGET_KERNEL}); aligning kernel from ${KERNEL_RPMS_DIR}"
 
     KERNEL_INSTALL_RPMS=()
     for pkg in kernel kernel-core kernel-modules kernel-modules-core kernel-modules-extra; do
         if rpm -q "$pkg" &>/dev/null; then
-            match="$(find /tmp/akmods/kernel-rpms -maxdepth 1 -name "${pkg}-${TARGET_KERNEL}.rpm" | head -n1)"
+            match="$(find "$KERNEL_RPMS_DIR" -maxdepth 1 -name "${pkg}-${TARGET_KERNEL}.rpm" | head -n1)"
             if [[ -z "$match" ]]; then
-                echo "ERROR: Missing ${pkg}-${TARGET_KERNEL}.rpm in /tmp/akmods/kernel-rpms" >&2
+                echo "ERROR: Missing ${pkg}-${TARGET_KERNEL}.rpm in ${KERNEL_RPMS_DIR}" >&2
                 exit 1
             fi
             KERNEL_INSTALL_RPMS+=("$match")
@@ -37,7 +41,7 @@ if [[ -n "$TARGET_KERNEL" && "$INSTALLED_KERNEL" != "$TARGET_KERNEL" ]]; then
     done
 
     if rpm -q kernel-uki-virt &>/dev/null; then
-        uki_match="$(find /tmp/akmods/kernel-rpms -maxdepth 1 -name "kernel-uki-virt-${TARGET_KERNEL}.rpm" | head -n1 || true)"
+        uki_match="$(find "$KERNEL_RPMS_DIR" -maxdepth 1 -name "kernel-uki-virt-${TARGET_KERNEL}.rpm" | head -n1 || true)"
         if [[ -n "$uki_match" ]]; then
             KERNEL_INSTALL_RPMS+=("$uki_match")
         fi
@@ -71,54 +75,62 @@ if [[ "${#NVIDIA_ADDONS[@]}" -eq 0 ]]; then
 fi
 dnf5 install -y "${NVIDIA_ADDONS[@]}"
 
-# Prevent RPM Fusion NVIDIA repo from conflicting with Negativo17 driver packaging
-if [[ -f /etc/yum.repos.d/rpmfusion-nonfree-nvidia-driver.repo ]]; then
-    sed -i 's@enabled=1@enabled=0@g' /etc/yum.repos.d/rpmfusion-nonfree-nvidia-driver.repo
+# Temporarily disable RPM Fusion repos so RPM Fusion NVIDIA packages never conflict with Negativo17
+if dnf5 repolist --all | grep -q rpmfusion; then
+    dnf5 config-manager setopt "rpmfusion*".enabled=0
 fi
 
 # Temporarily enable Negativo17 & NVIDIA Container Toolkit repos installed by ublue-os-nvidia-addons
-for repo_file in /etc/yum.repos.d/negativo17-fedora-nvidia.repo /etc/yum.repos.d/nvidia-container-toolkit.repo; do
-    if [[ -f "$repo_file" ]]; then
-        sed -i 's@enabled=0@enabled=1@g' "$repo_file"
-    fi
-done
+dnf5 config-manager setopt "fedora-nvidia*".enabled=1 nvidia-container-toolkit.enabled=1
 
-# Pin userspace driver packages to the exact ABI version of kmod-nvidia-open.
-# Strip any leading RPM epoch (e.g. "3:") so dnf glob matching works cleanly across Negativo17 packaging.
-NV_VER="${NVIDIA_AKMOD_VERSION:-}"
-if [[ -n "$NV_VER" ]]; then
-    NV_VER_CLEAN="${NV_VER#*:}"
-    NV_SUFFIX="-${NV_VER_CLEAN}*"
-else
-    NV_SUFFIX=""
+# Install pre-bundled, version-matched NVIDIA userspace RPMs from akmods-nvidia-open alongside kmod-nvidia
+ARCH="$(rpm -E '%{_arch}')"
+shopt -s nullglob
+NVIDIA_LOCAL_RPMS=(
+    /tmp/akmods-nvidia/rpms/nvidia/*."${ARCH}".rpm
+    /tmp/akmods-nvidia/rpms/nvidia/*.noarch.rpm
+)
+if [[ "$ARCH" == "x86_64" ]]; then
+    NVIDIA_LOCAL_RPMS+=(/tmp/akmods-nvidia/rpms/nvidia/*.i686.rpm)
+fi
+shopt -u nullglob
+
+if [[ "${#NVIDIA_LOCAL_RPMS[@]}" -eq 0 ]]; then
+    echo "ERROR: No pre-bundled NVIDIA RPMs found in /tmp/akmods-nvidia/rpms/nvidia" >&2
+    exit 1
 fi
 
-dnf5 install -y --setopt=install_weak_deps=False \
+dnf5 install -y \
     "${KMOD_RPMS[@]}" \
-    "nvidia-driver${NV_SUFFIX}" \
-    "nvidia-driver-cuda${NV_SUFFIX}" \
-    "nvidia-driver-cuda-libs${NV_SUFFIX}" \
-    "nvidia-driver-libs${NV_SUFFIX}" \
-    "nvidia-driver-libs${NV_SUFFIX}.i686" \
-    "nvidia-settings${NV_SUFFIX}" \
-    "nvidia-persistenced${NV_SUFFIX}" \
-    "libnvidia-fbc${NV_SUFFIX}" \
+    "${NVIDIA_LOCAL_RPMS[@]}" \
+    egl-wayland \
     libva-nvidia-driver \
     nvidia-container-toolkit
 
+# Verify kmod-nvidia and nvidia-driver ABI versions match exactly
+KMOD_VERSION="$(rpm -q --qf '%{VERSION}' kmod-nvidia)"
+DRIVER_VERSION="$(rpm -q --qf '%{VERSION}' nvidia-driver)"
+if [[ "$KMOD_VERSION" != "$DRIVER_VERSION" ]]; then
+    echo "ERROR: kmod-nvidia version (${KMOD_VERSION}) does not match nvidia-driver version (${DRIVER_VERSION})" >&2
+    exit 1
+fi
+
 # Disable third-party NVIDIA repos again so runtime dnf state remains clean
-for repo_file in /etc/yum.repos.d/negativo17-fedora-nvidia.repo /etc/yum.repos.d/nvidia-container-toolkit.repo; do
-    if [[ -f "$repo_file" ]]; then
-        sed -i 's@enabled=1@enabled=0@g' "$repo_file"
-    fi
-done
+dnf5 config-manager setopt "fedora-nvidia*".enabled=0 nvidia-container-toolkit.enabled=0
+
+# Re-enable core RPM Fusion repos for 04-gaming.sh (keeping rpmfusion-nonfree-nvidia-driver disabled)
+dnf5 config-manager setopt \
+    rpmfusion-free.enabled=1 \
+    rpmfusion-free-updates.enabled=1 \
+    rpmfusion-nonfree.enabled=1 \
+    rpmfusion-nonfree-updates.enabled=1
 
 # 5. Load SELinux container policy for GPU passthrough if packaged
 if [[ -f /usr/share/selinux/packages/nvidia-container.pp ]]; then
     semodule --verbose --install /usr/share/selinux/packages/nvidia-container.pp
 fi
 
-# 6. Configure kernel module options (DRM modeset + fbdev + VRAM preservation across suspend)
+# 6. Configure kernel module options (DRM modeset + fbdev + VRAM preservation across suspend) & dracut preload
 mkdir -p /etc/modprobe.d
 cat <<'EOF' > /etc/modprobe.d/nvidia-modeset.conf
 blacklist nouveau
@@ -127,6 +139,12 @@ options nvidia-drm modeset=1 fbdev=1
 options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp
 EOF
 
+# Force-load NVIDIA and iGPU drivers in initramfs (prevents black screen on boot & preserves iGPU acceleration)
+if [[ -f /usr/lib/dracut/dracut.conf.d/99-nvidia.conf ]]; then
+    sed -i 's@omit_drivers@force_drivers@g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
+    sed -i 's@ nvidia @ i915 amdgpu nvidia @g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
+fi
+
 # 7. Enable NVIDIA power management, persistence, and container CDI systemd units
 systemctl enable \
     nvidia-suspend.service \
@@ -134,6 +152,8 @@ systemctl enable \
     nvidia-resume.service \
     nvidia-persistenced.service
 
-if systemctl list-unit-files ublue-nvctk-cdi.service &>/dev/null; then
-    systemctl enable ublue-nvctk-cdi.service
-fi
+for unit in nvidia-cdi-refresh.service nvidia-cdi-refresh.path ublue-nvctk-cdi.service; do
+    if systemctl list-unit-files "$unit" &>/dev/null; then
+        systemctl enable "$unit"
+    fi
+done

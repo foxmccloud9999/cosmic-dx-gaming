@@ -15,9 +15,7 @@ else
     dnf5 install -y --allowerasing ffmpeg
 fi
 dnf5 install -y --allowerasing \
-    libavcodec-freeworld \
     mesa-va-drivers-freeworld \
-    mesa-vdpau-drivers-freeworld \
     gstreamer1-plugins-bad-freeworld \
     gstreamer1-plugins-ugly
 
