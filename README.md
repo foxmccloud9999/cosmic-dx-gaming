@@ -4,13 +4,14 @@ A custom **Fedora COSMIC Atomic** (`bootc`) desktop image combining **Universal 
 
 ## What Is Included
 
-- **Base OS**: Official Fedora COSMIC Atomic (`quay.io/fedora-ostree-desktops/cosmic-atomic:45`) with RPM Fusion Free & Nonfree hardware-accelerated codecs (`ffmpeg`, `mesa-va-drivers-freeworld`, GStreamer Freeworld/Ugly plugins).
+- **Base OS**: Official Fedora COSMIC Atomic (`quay.io/fedora-ostree-desktops/cosmic-atomic:45`) with RPM Fusion Free & Nonfree hardware-accelerated codecs (`ffmpeg`, `mesa-va-drivers-freeworld`, `mesa-vulkan-drivers-freeworld`, GStreamer Freeworld/Ugly plugins).
 - **Universal Blue Core**:
   - Built-in **Homebrew** (`ghcr.io/ublue-os/brew`) with first-boot user setup and background update/upgrade timers.
   - **`ujust`** (`ublue-os-just`) with curated, **COSMIC-safe** recipes (no GNOME/KDE-only commands).
   - Automatic background OS updates (`bootc-fetch-apply-updates.timer`).
-- **NVIDIA Open Drivers**:
-  - Pre-built `kmod-nvidia-open` from `ghcr.io/ublue-os/akmods-nvidia-open:main-45` (RTX 20-series / Turing and newer), automatic kernel NVR alignment, Negativo17 driver userspace + `.i686` 32-bit libs, `nvidia-container-toolkit`, SELinux container policy, declarative `kargs.d`, and suspend/resume services.
+- **Graphics & Hybrid GPU Stack (AMD, Intel, VirtIO/VM + NVIDIA Open)**:
+  - Full 64-bit & 32-bit open-source Mesa OpenGL/EGL/GBM/GLU/Vulkan (`radeonsi`/`radv`, Intel `iris`/`crocus`/`anv`/`hasvk`, VirtIO `virgl`/`venus`, software `llvmpipe`/`lavapipe`), AMD & Intel GPU firmware, Intel media/QuickSync (`intel-media-driver`, `libva-intel-driver`, `intel-vpl-gpu-rt`), `switcheroo-control`, and early KMS initramfs preload (`i915`, `xe`, `amdgpu`, `virtio-gpu`).
+  - Pre-built `kmod-nvidia-open` from `ghcr.io/ublue-os/akmods-nvidia-open:main-45` (RTX 20-series / Turing and newer), automatic kernel NVR alignment, Negativo17 driver userspace + `.i686` 32-bit libs, `nvidia-container-toolkit`, SELinux container policy, declarative `kargs.d`, `nvidia-persistenced`, and CDI refresh services.
 - **Developer Experience (DX)**:
   - `docker-ce` (+ Buildx & Compose), `podman`, `podman-compose`, `podman-tui`, `distrobox`, `skopeo`, `buildah`.
   - Virtualization: `qemu-kvm`, `libvirt`, `virt-manager`, `edk2-ovmf`, `swtpm`, `incus`.

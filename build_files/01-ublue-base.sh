@@ -8,16 +8,55 @@ dnf5 install -y \
     "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${RELEASE}.noarch.rpm" \
     "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${RELEASE}.noarch.rpm"
 
-# 2. Swap stub codecs for hardware-accelerated freeworld builds
+# 2. Swap stub codecs and install full open-source AMD, Intel, and VirtIO GPU/video stack
 if rpm -q ffmpeg-free &>/dev/null; then
     dnf5 swap -y ffmpeg-free ffmpeg --allowerasing
 else
     dnf5 install -y --allowerasing ffmpeg
 fi
+
+# Core open-source GPU drivers (AMD RadeonSI/RADV, Intel Iris/Crocus/ANV/HasVK, VirtIO/VirGL/Venus, Lavapipe)
+# plus GPU firmware, VA-API/GL diagnostics, and hybrid multi-GPU switching
+dnf5 install -y \
+    mesa-dri-drivers \
+    mesa-dri-drivers.i686 \
+    mesa-vulkan-drivers \
+    mesa-vulkan-drivers.i686 \
+    mesa-libGL \
+    mesa-libGL.i686 \
+    mesa-libEGL \
+    mesa-libEGL.i686 \
+    mesa-libgbm \
+    mesa-libgbm.i686 \
+    mesa-libGLU \
+    mesa-libGLU.i686 \
+    amd-gpu-firmware \
+    intel-gpu-firmware \
+    intel-vpl-gpu-rt \
+    libva \
+    libva.i686 \
+    libva-utils \
+    glx-utils \
+    egl-utils \
+    switcheroo-control
+
+# Full hardware-accelerated Intel VA-API (Gen4 through Arc/Core Ultra) and GStreamer codecs from RPM Fusion
 dnf5 install -y --allowerasing \
-    mesa-va-drivers-freeworld \
+    intel-media-driver \
+    intel-media-driver.i686 \
+    libva-intel-driver \
+    libva-intel-driver.i686 \
     gstreamer1-plugins-bad-freeworld \
     gstreamer1-plugins-ugly
+
+# Upgrade Mesa VA-API and Vulkan (64-bit + 32-bit) to RPM Fusion Freeworld for hardware H.264/H.265/AV1 codecs.
+# Fall back gracefully to stock Fedora Mesa if RPM Fusion mirrors briefly lag behind a Fedora Mesa update.
+dnf5 install -y --allowerasing \
+    mesa-va-drivers-freeworld \
+    mesa-va-drivers-freeworld.i686 \
+    mesa-vulkan-drivers-freeworld \
+    mesa-vulkan-drivers-freeworld.i686 \
+    || echo "WARNING: RPM Fusion Mesa Freeworld temporarily out of sync with Fedora Mesa; keeping stock Mesa drivers."
 
 # 3. Install Universal Blue core utilities (ujust, udev rules, LUKS TPM helpers) + QoL CLI
 dnf5 install -y dnf5-plugins
@@ -51,12 +90,14 @@ dnf5 -y copr disable ublue-os/packages
 systemctl preset brew-setup.service brew-update.timer brew-upgrade.timer || true
 systemctl enable brew-setup.service brew-update.timer brew-upgrade.timer
 
-# 5. Enable automatic atomic OS background updates
+# 5. Enable automatic atomic OS background updates and hybrid GPU switching
 if systemctl list-unit-files bootc-fetch-apply-updates.timer &>/dev/null; then
     systemctl enable bootc-fetch-apply-updates.timer
 elif systemctl list-unit-files rpm-ostreed-automatic.timer &>/dev/null; then
     systemctl enable rpm-ostreed-automatic.timer
 fi
+
+systemctl enable switcheroo-control.service
 
 # 6. Configure Cosign container image trust only when cosign.pub exists and IMAGE_OWNER is configured
 IMAGE_NAME="${IMAGE_NAME:-cosmic-dx-gaming}"

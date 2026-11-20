@@ -57,8 +57,14 @@ setup-sunshine:
 gaming-check:
     #!/usr/bin/env bash
     set -euo pipefail
+    echo "=== Detected GPUs (switcherooctl) ==="
+    switcherooctl list 2>/dev/null || echo "switcherooctl unavailable"
+    echo ""
     echo "=== NVIDIA Driver ==="
     nvidia-smi --query-gpu=name,driver_version,vbios_version --format=csv,noheader || echo "nvidia-smi unavailable"
+    echo ""
+    echo "=== OpenGL Renderer ==="
+    glxinfo -B 2>/dev/null | head -n 20 || echo "glxinfo unavailable"
     echo ""
     echo "=== Kernel Args ==="
     cat /proc/cmdline

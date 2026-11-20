@@ -17,8 +17,6 @@ dnf5 install -y \
     vulkan-tools \
     vulkan-loader \
     vulkan-loader.i686 \
-    mesa-vulkan-drivers.i686 \
-    mesa-dri-drivers.i686 \
     pipewire-alsa.i686 \
     steam
 

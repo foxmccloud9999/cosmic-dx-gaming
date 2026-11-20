@@ -78,7 +78,14 @@ jobs:
             test -f /usr/share/homebrew.tar.zst || test -d /usr/share/homebrew
             systemctl is-enabled brew-setup.service brew-update.timer brew-upgrade.timer
             systemctl is-enabled docker.socket podman.socket libvirtd.service incus.socket
-            systemctl is-enabled nvidia-persistenced.service nvidia-cdi-refresh.service nvidia-cdi-refresh.path
+            systemctl is-enabled nvidia-persistenced.service nvidia-cdi-refresh.service nvidia-cdi-refresh.path switcheroo-control.service
+            test -f /usr/share/vulkan/icd.d/radeon_icd.x86_64.json
+            test -f /usr/share/vulkan/icd.d/intel_icd.x86_64.json
+            test -f /usr/share/vulkan/icd.d/virtio_icd.x86_64.json
+            test -f /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+            test -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json
+            test -f /usr/share/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
+            test -f /usr/lib64/dri/iHD_drv_video.so
             test -f "/etc/pki/containers/${{ env.IMAGE_NAME }}.pub"
             grep -q "ghcr.io/${{ steps.meta.outputs.owner }}/${{ env.IMAGE_NAME }}" /etc/containers/policy.json
             KVER="$(rpm -q --qf "%{VERSION}-%{RELEASE}.%{ARCH}" kernel-core | head -n1)"

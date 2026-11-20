@@ -139,10 +139,10 @@ options nvidia-drm modeset=1 fbdev=1
 options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp
 EOF
 
-# Force-load NVIDIA and iGPU drivers in initramfs (prevents black screen on boot & preserves iGPU acceleration)
+# Force-load open-source (Intel i915/xe, AMD amdgpu, VM virtio-gpu) and NVIDIA drivers in initramfs
 if [[ -f /usr/lib/dracut/dracut.conf.d/99-nvidia.conf ]]; then
     sed -i 's@omit_drivers@force_drivers@g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
-    sed -i 's@ nvidia @ i915 amdgpu nvidia @g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
+    sed -i 's@ nvidia @ i915 xe amdgpu virtio-gpu nvidia @g' /usr/lib/dracut/dracut.conf.d/99-nvidia.conf
 fi
 
 # 7. Enable NVIDIA persistence, container CDI, and optional power-management systemd units
